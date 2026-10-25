@@ -19,12 +19,16 @@ public class FileRelayServer {
         public final String id = UUID.randomUUID().toString().substring(0, 12);
         public final String sender, receiver, fileName;
         public final long size;
+        /** Số byte thật trên đường truyền (đã gồm phần mã hóa từng khối). */
+        public final long wireSize;
         public volatile boolean accepted = false;
         final CompletableFuture<Socket> receiverSocket = new CompletableFuture<>();
 
         Transfer(String sender, String receiver, String fileName, long size) {
             this.sender = sender; this.receiver = receiver;
             this.fileName = fileName; this.size = size;
+            long blocks = (size + BUF - 1) / BUF;
+            this.wireSize = size + blocks * (4 + 12 + 16);
         }
     }
 
@@ -87,7 +91,7 @@ public class FileRelayServer {
             r = t.receiverSocket.get(30, TimeUnit.SECONDS);
             OutputStream out = new BufferedOutputStream(r.getOutputStream());
             byte[] buf = new byte[BUF];
-            long remaining = t.size;
+            long remaining = t.wireSize;
             while (remaining > 0) {
                 int n = in.read(buf, 0, (int) Math.min(buf.length, remaining));
                 if (n < 0) throw new EOFException("Ben gui ngat ket noi");
@@ -95,7 +99,7 @@ public class FileRelayServer {
                 remaining -= n;
             }
             out.flush();
-            System.out.println("[FILE] " + t.sender + " -> " + t.receiver + ": " + t.fileName + " (" + t.size + " byte) xong");
+            System.out.println("[FILE] " + t.sender + " -> " + t.receiver + ": " + t.fileName + " (" + t.size + " byte, " + t.wireSize + " byte da ma hoa) xong");
         } catch (Exception e) {
             status = "FAIL: " + e.getMessage();
             System.out.println("[FILE] That bai: " + e.getMessage());

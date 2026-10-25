@@ -3,14 +3,17 @@ package com.nhom15.chat.client.ui;
 import com.nhom15.chat.client.ChatClient;
 import com.nhom15.chat.client.FileTransfer;
 import com.nhom15.chat.client.SocketListenerThread;
+import com.nhom15.chat.common.CryptoUtil;
 import com.nhom15.chat.common.Message;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import javax.crypto.SecretKey;
 import javax.swing.*;
 
 public class ChatFrame extends JFrame implements SocketListenerThread.Listener {
@@ -26,6 +29,7 @@ public class ChatFrame extends JFrame implements SocketListenerThread.Listener {
     private final JProgressBar progress = new JProgressBar(0, 100);
     // file đang chờ người nhận trả lời: key = tên người nhận
     private final Map<String, File> pendingSend = new HashMap<>();
+    private final Map<String, SecretKey> pendingKeys = new HashMap<>();
 
     public ChatFrame(ChatClient client) {
         this.client = client;
@@ -110,6 +114,7 @@ public class ChatFrame extends JFrame implements SocketListenerThread.Listener {
                 break;
             case "FILE_REJECT":
                 pendingSend.remove(m.from);
+                pendingKeys.remove(m.from);
                 append("[File] " + m.from + " đã từ chối nhận file.");
                 break;
             case "FILE_DONE":
@@ -141,11 +146,16 @@ public class ChatFrame extends JFrame implements SocketListenerThread.Listener {
         o.addProperty("fileName", f.getName());
         o.addProperty("size", f.length());
         try {
+            SecretKey fileKey = CryptoUtil.newAesKey();
+            o.addProperty("key", Base64.getEncoder().encodeToString(fileKey.getEncoded()));
+            o.addProperty("sha256", FileTransfer.sha256(f));
             pendingSend.put(target, f);
+            pendingKeys.put(target, fileKey);
             client.send(new Message("FILE_OFFER", client.getUsername(), target, o.toString()));
             append("[File] Đã gửi lời mời " + f.getName() + " (" + f.length() + " byte) tới " + target + ", chờ trả lời...");
         } catch (IOException ex) {
             pendingSend.remove(target);
+            pendingKeys.remove(target);
             append("[Lỗi] Không gửi được lời mời: " + ex.getMessage());
         }
     }
@@ -156,6 +166,8 @@ public class ChatFrame extends JFrame implements SocketListenerThread.Listener {
         String fileName = o.get("fileName").getAsString();
         long size = o.get("size").getAsLong();
         String id = o.get("transferId").getAsString();
+        final SecretKey fileKey = CryptoUtil.aesKeyFromBytes(Base64.getDecoder().decode(o.get("key").getAsString()));
+        final String sha = o.get("sha256").getAsString();
         int ans = JOptionPane.showConfirmDialog(this,
                 m.from + " muốn gửi file \"" + fileName + "\" (" + size + " byte). Nhận không?",
                 "Nhận file", JOptionPane.YES_NO_OPTION);
@@ -174,7 +186,7 @@ public class ChatFrame extends JFrame implements SocketListenerThread.Listener {
             final File dest = fc.getSelectedFile();
             client.send(new Message("FILE_ACCEPT", client.getUsername(), m.from, id));
             append("[File] Đang nhận " + fileName + " từ " + m.from + "...");
-            runTransfer(() -> FileTransfer.receive(client.getHost(), client.getUsername(), id, dest, size, this::showProgress));
+            runTransfer(() -> FileTransfer.receive(client.getHost(), client.getUsername(), id, dest, size, fileKey, sha, this::showProgress));
         } catch (IOException ex) {
             append("[Lỗi] " + ex.getMessage());
         }
@@ -183,10 +195,11 @@ public class ChatFrame extends JFrame implements SocketListenerThread.Listener {
     /** Người gửi: nhận FILE_ACCEPT (content = transferId) thì bắt đầu đẩy byte[]. */
     private void onFileAccept(Message m) {
         File f = pendingSend.remove(m.from);
-        if (f == null) return;
+        SecretKey fileKey = pendingKeys.remove(m.from);
+        if (f == null || fileKey == null) return;
         String id = m.content;
         append("[File] " + m.from + " đã đồng ý, đang gửi " + f.getName() + "...");
-        runTransfer(() -> FileTransfer.send(client.getHost(), client.getUsername(), id, f, this::showProgress));
+        runTransfer(() -> FileTransfer.send(client.getHost(), client.getUsername(), id, f, fileKey, this::showProgress));
     }
 
     private void onFileDone(Message m) {
