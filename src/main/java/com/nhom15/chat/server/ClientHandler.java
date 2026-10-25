@@ -20,6 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ClientHandler implements Runnable {
     // Cặp khóa RSA tạo mới mỗi lần Server chạy, không lưu trong code.
     private static final KeyPair RSA = CryptoUtil.generateRsa();
+    // Tài khoản lưu trong users.json (chỉ có salt và mã băm mật khẩu).
+    private static final UserStore USERS = new UserStore(new File("users.json"));
     private final Socket socket;
     private final ConcurrentHashMap<String, ClientHandler> online;
     private DataInputStream in;
@@ -45,7 +47,9 @@ public class ClientHandler implements Runnable {
 
             while (true) {
                 Message m = FramedIO.receive(in, aesKey);
-                System.out.println("[SERVER] Nhận: " + m.toJson());
+                // Không in mật khẩu ra log
+                boolean secret = "LOGIN".equals(m.action) || "REGISTER".equals(m.action);
+                System.out.println("[SERVER] Nhận: " + (secret ? new Message(m.action, m.from, m.to, "***").toJson() : m.toJson()));
                 if (!handle(m)) break;
             }
         } catch (IOException e) {
@@ -74,6 +78,9 @@ public class ClientHandler implements Runnable {
                 }
                 return true;
             }
+            case "REGISTER":
+                register(m);
+                return true;
             case "LOGIN":
                 login(m);
                 return true;
@@ -125,19 +132,45 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    private static String validName(String name) {
+        if (name.isEmpty() || name.length() > 20 || name.contains(",")) {
+            return "Tên không hợp lệ (1-20 ký tự, không chứa dấu phẩy)";
+        }
+        return null;
+    }
+
+    private void register(Message m) throws IOException {
+        String name = m.from == null ? "" : m.from.trim();
+        String bad = validName(name);
+        if (bad == null) bad = USERS.register(name, m.content);
+        if (bad != null) {
+            send(new Message("REGISTER_FAIL", "server", name, bad));
+            return;
+        }
+        System.out.println("[SERVER] Đăng ký tài khoản mới: " + name);
+        send(new Message("REGISTER_OK", "server", name, "Đăng ký thành công"));
+    }
+
     private void login(Message m) throws IOException {
         String name = m.from == null ? "" : m.from.trim();
         if (username != null) {
             send(new Message("LOGIN_FAIL", "server", name, "Bạn đã đăng nhập rồi"));
             return;
         }
-        if (name.isEmpty() || name.length() > 20 || name.contains(",")) {
-            send(new Message("LOGIN_FAIL", "server", name, "Tên không hợp lệ (1-20 ký tự, không chứa dấu phẩy)"));
+        String bad = validName(name);
+        if (bad != null) {
+            send(new Message("LOGIN_FAIL", "server", name, bad));
             return;
         }
-        // putIfAbsent là thao tác nguyên tử: hai người trùng tên cùng lúc thì chỉ một người thành công.
+        String stored = USERS.verify(name, m.content);
+        if (stored == null) {
+            send(new Message("LOGIN_FAIL", "server", name, "Sai tên hoặc mật khẩu"));
+            return;
+        }
+        name = stored; // dùng đúng tên hiển thị đã đăng ký
+        // putIfAbsent là thao tác nguyên tử: một tài khoản chỉ đăng nhập được ở một nơi.
         if (online.putIfAbsent(name, this) != null) {
-            send(new Message("LOGIN_FAIL", "server", name, "Tên đã được sử dụng"));
+            send(new Message("LOGIN_FAIL", "server", name, "Tài khoản đang đăng nhập ở nơi khác"));
             return;
         }
         username = name;

@@ -30,3 +30,7 @@ Thumbs.db
 *.pem
 *.key
 nbactions.xml
+
+# Tài khoản người dùng của Server (chứa mã băm mật khẩu)
+users.json
+users.json.tmp

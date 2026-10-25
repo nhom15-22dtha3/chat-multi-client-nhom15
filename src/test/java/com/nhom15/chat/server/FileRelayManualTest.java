@@ -68,8 +68,8 @@ public class FileRelayManualTest {
         ChatClient a = new ChatClient(), b = new ChatClient();
         a.connect("localhost", 5000);
         b.connect("localhost", 5000);
-        a.login("A");
-        b.login("B");
+        a.loginOrRegister("A", "123456");
+        b.loginOrRegister("B", "123456");
 
         System.out.println(run(a, b, src, false) ? "KET QUA 1: DAT - file nhan giong file goc" : "KET QUA 1: SAI");
         System.out.println(!run(a, b, src, true) ? "KET QUA 2: DAT - sai SHA-256 bi tu choi" : "KET QUA 2: SAI");

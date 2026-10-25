@@ -24,6 +24,7 @@ Client (Swing)                        Server
 
 - Cổng **5000** (điều khiển): đăng nhập, danh sách online, chat, lời mời gửi file. Mọi gói là JSON, có tiền tố 4 byte độ dài.
 - Cổng **5001** (file): Server nhận byte từ người gửi và chuyển tiếp từng khối 8 KB (đã mã hóa AES-GCM, dạng `[4 byte độ dài][IV + bản mã + thẻ]`) cho người nhận, không lưu cả file trong bộ nhớ. Người nhận giải mã từng khối và so SHA-256 của file với giá trị người gửi đã tính.
+- Tài khoản lưu trong `users.json` cạnh nơi chạy Server, chỉ chứa salt ngẫu nhiên và mã băm PBKDF2-HMAC-SHA256 (120.000 vòng), không lưu mật khẩu; mật khẩu cũng không được in ra log. Console Client mặc định dùng mật khẩu `123456` và tự đăng ký nếu chưa có tài khoản.
 - Server lưu danh sách người online trong ConcurrentHashMap, dùng putIfAbsent để hai người trùng tên không cùng đăng nhập thành công.
 
 ## Giao thức
@@ -34,7 +35,8 @@ JSON có các trường `action`, `from`, `to`, `content`, `time`. Trường `fr
 | action | Hướng | Ý nghĩa |
 |---|---|---|
 | PUBKEY_REQ, PUBKEY, SESSION_KEY, SECURE_OK | Client và Server | Trao đổi khóa, chạy trước khi đăng nhập |
-| LOGIN, LOGIN_OK, LOGIN_FAIL | Client và Server | Đăng nhập (tên 1-20 ký tự, không trùng, không có dấu phẩy) |
+| REGISTER, REGISTER_OK, REGISTER_FAIL | Client và Server | Đăng ký tài khoản (tên 1-20 ký tự, không có dấu phẩy; mật khẩu 4-64 ký tự; tên không được trùng kể cả khác hoa thường hoặc dấu) |
+| LOGIN, LOGIN_OK, LOGIN_FAIL | Client và Server | Đăng nhập bằng tên và mật khẩu (mỗi tài khoản chỉ đăng nhập được ở một nơi) |
 | USER_LIST | Server tới Client | Danh sách người online, cách nhau bằng dấu phẩy |
 | MSG_PRIVATE, MSG_GROUP | Client và Server | Chat 1-1 và chat nhóm |
 | FILE_OFFER | Client tới Server tới Client | Lời mời gửi file `{fileName, size}`, Server thêm `transferId` |
@@ -71,7 +73,7 @@ Chạy theo thứ tự:
     # 2. Client giao diện, chạy nhiều lần, mỗi lần một tên khác nhau
     java -cp "target/classes;$GSON" com.nhom15.chat.client.ui.LoginFrame
 
-Ở cửa sổ đăng nhập nhập tên, địa chỉ Server (`localhost` nếu cùng máy) và cổng `5000`.
+Ở cửa sổ đăng nhập nhập tên, mật khẩu (lần đầu bấm Đăng ký), địa chỉ Server (`localhost` nếu cùng máy) và cổng `5000`.
 Chọn một người trong danh sách để chat riêng, chọn "Tất cả (chat nhóm)" để chat nhóm, nút "Gửi file" để gửi file cho người đang chọn.
 
 Chạy qua nhiều máy: dùng Tailscale, Server mở cổng 5000 và 5001 trên tường lửa, client nhập IP Tailscale của máy Server (dạng `100.x.x.x`).

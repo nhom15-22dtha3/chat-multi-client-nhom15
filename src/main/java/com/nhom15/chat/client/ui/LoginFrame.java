@@ -8,25 +8,32 @@ import java.awt.*;
 /** Cửa sổ đăng nhập: nhập tên người dùng, IP và cổng của server. */
 public class LoginFrame extends JFrame {
     private final JTextField txtUser = new JTextField(15);
+    private final JPasswordField txtPass = new JPasswordField(15);
     private final JTextField txtHost = new JTextField("localhost", 15);
     private final JTextField txtPort = new JTextField("5000", 15);
     private final JButton btnLogin = new JButton("Đăng nhập");
+    private final JButton btnRegister = new JButton("Đăng ký");
     private final JLabel lblStatus = new JLabel(" ");
 
     public LoginFrame() {
         super("Chat - Đăng nhập");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 
-        JPanel form = new JPanel(new GridLayout(3, 2, 8, 8));
+        JPanel form = new JPanel(new GridLayout(4, 2, 8, 8));
         form.add(new JLabel("Tên người dùng:"));
         form.add(txtUser);
+        form.add(new JLabel("Mật khẩu:"));
+        form.add(txtPass);
         form.add(new JLabel("IP Server:"));
         form.add(txtHost);
         form.add(new JLabel("Cổng:"));
         form.add(txtPort);
 
         JPanel bottom = new JPanel(new BorderLayout(0, 6));
-        bottom.add(btnLogin, BorderLayout.CENTER);
+        JPanel buttons = new JPanel(new GridLayout(1, 2, 8, 0));
+        buttons.add(btnLogin);
+        buttons.add(btnRegister);
+        bottom.add(buttons, BorderLayout.CENTER);
         bottom.add(lblStatus, BorderLayout.SOUTH);
 
         JPanel root = new JPanel(new BorderLayout(0, 12));
@@ -39,10 +46,12 @@ public class LoginFrame extends JFrame {
         pack();
         setLocationRelativeTo(null);
 
-        btnLogin.addActionListener(e -> onLogin());
+        btnLogin.addActionListener(e -> submit(false));
+        btnRegister.addActionListener(e -> submit(true));
     }
 
-    private void onLogin() {
+    /** register = true: đăng ký tài khoản mới rồi đăng nhập luôn. */
+    private void submit(boolean register) {
         String user = txtUser.getText().trim();
         String host = txtHost.getText().trim();
         int port;
@@ -52,8 +61,9 @@ public class LoginFrame extends JFrame {
             lblStatus.setText("Cổng phải là số");
             return;
         }
-        if (user.isEmpty() || host.isEmpty()) {
-            lblStatus.setText("Vui lòng nhập đủ tên và IP");
+        final String fPass = new String(txtPass.getPassword());
+        if (user.isEmpty() || host.isEmpty() || fPass.isEmpty()) {
+            lblStatus.setText("Vui lòng nhập đủ tên, mật khẩu và IP");
             return;
         }
 
@@ -61,6 +71,7 @@ public class LoginFrame extends JFrame {
         final String fHost = host;
         final int fPort = port;
         btnLogin.setEnabled(false);
+        btnRegister.setEnabled(false);
         lblStatus.setText("Đang kết nối...");
 
         // Kết nối và đăng nhập chạy nền để không làm đứng giao diện
@@ -71,7 +82,11 @@ public class LoginFrame extends JFrame {
             protected String doInBackground() {
                 try {
                     client.connect(fHost, fPort);
-                    return client.login(fUser);
+                    if (register) {
+                        String err = client.register(fUser, fPass);
+                        if (err != null) return err;
+                    }
+                    return client.login(fUser, fPass);
                 } catch (IOException e) {
                     return "Không kết nối được: " + e.getMessage();
                 }
@@ -88,11 +103,13 @@ public class LoginFrame extends JFrame {
                         client.close();
                         lblStatus.setText(err);
                         btnLogin.setEnabled(true);
+                        btnRegister.setEnabled(true);
                     }
                 } catch (Exception e) {
                     client.close();
                     lblStatus.setText("Lỗi: " + e.getMessage());
                     btnLogin.setEnabled(true);
+                    btnRegister.setEnabled(true);
                 }
             }
         }.execute();
