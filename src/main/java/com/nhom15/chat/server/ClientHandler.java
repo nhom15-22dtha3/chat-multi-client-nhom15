@@ -167,6 +167,14 @@ public class ClientHandler implements Runnable {
             out2.addProperty("fileName", fileName);
             out2.addProperty("size", size);
             out2.addProperty("transferId", t.id);
+            // Khóa AES của lần truyền và SHA-256 do người gửi tạo; Server chỉ chuyển tiếp cho người nhận
+            if (!o.has("key") || !o.has("sha256")) {
+                FileRelayServer.remove(t.id);
+                sendQuiet(this, new Message("ERROR", "server", username, "Thiếu khóa hoặc SHA-256 của file"));
+                return;
+            }
+            out2.addProperty("key", o.get("key").getAsString());
+            out2.addProperty("sha256", o.get("sha256").getAsString());
             sendQuiet(target, new Message("FILE_OFFER", username, m.to, out2.toString()));
         } catch (RuntimeException e) {
             sendQuiet(this, new Message("ERROR", "server", username, "FILE_OFFER không hợp lệ"));

@@ -23,7 +23,7 @@ Client (Swing)                        Server
 ```
 
 - Cổng **5000** (điều khiển): đăng nhập, danh sách online, chat, lời mời gửi file. Mọi gói là JSON, có tiền tố 4 byte độ dài.
-- Cổng **5001** (file): Server nhận byte từ người gửi và chuyển tiếp từng khối 8 KB cho người nhận, không lưu cả file trong bộ nhớ.
+- Cổng **5001** (file): Server nhận byte từ người gửi và chuyển tiếp từng khối 8 KB (đã mã hóa AES-GCM, dạng `[4 byte độ dài][IV + bản mã + thẻ]`) cho người nhận, không lưu cả file trong bộ nhớ. Người nhận giải mã từng khối và so SHA-256 của file với giá trị người gửi đã tính.
 - Server lưu danh sách người online trong ConcurrentHashMap, dùng putIfAbsent để hai người trùng tên không cùng đăng nhập thành công.
 
 ## Giao thức
@@ -51,7 +51,7 @@ content là `transferId`. Server chờ đủ hai bên (tối đa 30 giây), rồ
 2. Client xin khóa công khai, tạo khóa **AES-256** ngẫu nhiên, mã hóa bằng RSA (OAEP SHA-256) rồi gửi lên.
 3. Từ đó mọi gói trên cổng 5000 được mã hóa **AES-256-GCM**, mỗi gói có IV 12 byte ngẫu nhiên và thẻ xác thực.
    Gói bị sửa dù 1 byte sẽ giải mã thất bại và Server ngắt kết nối.
-4. Cổng file 5001 chuyển byte thô, chưa mã hóa (hạn chế đã biết).
+4. Cổng file 5001 mã hóa từng khối 8 KB bằng AES-256-GCM với khóa riêng của mỗi lần truyền (khóa và SHA-256 nằm trong `FILE_OFFER`, Server vẫn thấy khóa nên không phải mã hóa đầu cuối).
 
 ## Cách chạy
 
