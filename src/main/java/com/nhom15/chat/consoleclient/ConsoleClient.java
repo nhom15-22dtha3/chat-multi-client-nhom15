@@ -18,10 +18,11 @@ public class ConsoleClient {
         String host = args.length > 0 ? args[0] : "localhost";
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 5000;
         String name = args.length > 2 ? args[2] : "console";
+        String password = args.length > 3 ? args[3] : "123456"; // chỉ dùng để kiểm thử
 
         ChatClient client = new ChatClient();
         client.connect(host, port);
-        String err = client.login(name);
+        String err = client.loginOrRegister(name, password);
         if (err != null) {
             System.out.println("Dang nhap that bai: " + err);
             client.close();

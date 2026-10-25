@@ -52,15 +52,33 @@ public class ChatClient {
 
     public boolean isSecure() { return aesKey != null; }
 
-    /** Trả về null nếu đăng nhập thành công, ngược lại trả về lý do thất bại. */
-    public String login(String name) throws IOException {
-        username = name;
-        send(new Message("LOGIN", name, "", ""));
+    /** Trả về null nếu đăng ký thành công, ngược lại trả về lý do thất bại. */
+    public String register(String name, String password) throws IOException {
+        send(new Message("REGISTER", name, "", password));
         while (true) {
             Message m = receive();
-            if ("LOGIN_OK".equals(m.action)) return null;
+            if ("REGISTER_OK".equals(m.action)) return null;
+            if ("REGISTER_FAIL".equals(m.action)) return m.content;
+        }
+    }
+
+    /** Trả về null nếu đăng nhập thành công, ngược lại trả về lý do thất bại. */
+    public String login(String name, String password) throws IOException {
+        send(new Message("LOGIN", name, "", password));
+        while (true) {
+            Message m = receive();
+            if ("LOGIN_OK".equals(m.action)) {
+                username = m.to; // tên hiển thị do Server xác nhận
+                return null;
+            }
             if ("LOGIN_FAIL".equals(m.action)) return m.content;
         }
+    }
+
+    /** Tiện cho Console Client và kiểm thử: chưa có tài khoản thì tự đăng ký rồi đăng nhập. */
+    public String loginOrRegister(String name, String password) throws IOException {
+        register(name, password); // đã tồn tại thì bỏ qua lỗi, thử đăng nhập
+        return login(name, password);
     }
 
     public synchronized void send(Message m) throws IOException {
